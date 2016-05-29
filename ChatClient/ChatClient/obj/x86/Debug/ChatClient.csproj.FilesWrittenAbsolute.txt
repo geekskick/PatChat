@@ -1,0 +1,5 @@
+/Users/patrickmintram/Projects/ChatClient/ChatClient/obj/x86/Debug/.NETFramework,Version=v4.5.AssemblyAttribute.cs
+/Users/patrickmintram/Projects/ChatClient/ChatClient/bin/Debug/ChatClient.exe.mdb
+/Users/patrickmintram/Projects/ChatClient/ChatClient/bin/Debug/ChatClient.exe
+/Users/patrickmintram/Projects/ChatClient/ChatClient/obj/x86/Debug/ChatClient.exe
+/Users/patrickmintram/Projects/ChatClient/ChatClient/obj/x86/Debug/ChatClient.exe.mdb

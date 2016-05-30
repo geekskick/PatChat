@@ -8,6 +8,8 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 
+#include "linked_list.h"
+
 /*https://www.reddit.com/r/dailyprogrammer/comments/4knivr/20160523_challenge_268_easy_network_and_cards/ */
 
 #define KILL(a)         perror(a); exit(EXIT_FAILURE)
@@ -20,6 +22,7 @@
 struct my_thread_args{
     int my_thread_id_index;
     int client_fd_index;
+    struct my_name_list **list_of_users;
 };
 
 struct my_buffer{
@@ -32,12 +35,13 @@ struct my_connection{
     int socket_fd;
 };
 
+
 // ===== SHARED RESOURCES =====
 pthread_mutex_t mutex;
-int CLIENT_IDS[NUM_MAX];
-pthread_t THREAD_IDS[NUM_MAX];
-char *LOGIN_NAMES[MAX_USERS];
-struct my_connection CURRENT_CONNECTIONS[NUM_MAX];
+int SHARED_CLIENT_IDS[NUM_MAX];
+pthread_t SHARED_THREAD_IDS[NUM_MAX];
+struct my_connection SHARED_CURRENT_CONNECTIONS[NUM_MAX];
+struct my_name_list *SHARED_NAMES_LIST = NULL;
 
 // ===== DECLARATIONS ========
 void clear_client_id(int index);
@@ -45,12 +49,9 @@ void clear_thread_id(int index);
 int get_client_fd_at_index(int index);
 pthread_t get_thread_id_at_index(int index);
 void handle_ping(int client_fd);
-int next_free_name();
-bool insert_new_user_at_index(int index, char *name);
 void handle_login(struct my_buffer *buff, char *c, int my_fd, int my_thread_index, bool *flag);
 void handle_new_user(struct my_buffer *buff, char *c, int my_fd, int my_thread_index, bool *logged_in_flag);
 void handle_broadcast(struct my_buffer *buff, struct my_thread_args *args);
-bool name_exists(char *name_string);
 int get_socket_for_user(char* user_name);
 void get_name_for_connection(int index, char *buff);
 void handle_message_send(struct my_buffer *buff, int my_client_fd, int my_thread_id);
@@ -65,7 +66,7 @@ void clear_client_id(int index){
     if(index >= NUM_MAX) { return; }
     
     pthread_mutex_lock(&mutex);
-    CLIENT_IDS[index] = NOT_CONNECTED;
+    SHARED_CLIENT_IDS[index] = NOT_CONNECTED;
     pthread_mutex_unlock(&mutex);
     
 }
@@ -75,7 +76,7 @@ void clear_thread_id(int index){
     if(index >= NUM_MAX) { return; }
     
     pthread_mutex_lock(&mutex);
-    THREAD_IDS[index] = NO_ID;
+    SHARED_THREAD_IDS[index] = NO_ID;
     pthread_mutex_unlock(&mutex);
 }
 
@@ -84,7 +85,7 @@ int get_client_fd_at_index(int index){
     if(index >= NUM_MAX){ return NOT_CONNECTED; }
     int i = NOT_CONNECTED;
     pthread_mutex_lock(&mutex);
-    i = CLIENT_IDS[index];
+    i = SHARED_CLIENT_IDS[index];
     pthread_mutex_unlock(&mutex);
     return i;
 }
@@ -95,7 +96,7 @@ pthread_t get_thread_id_at_index(int index){
     
     pthread_t i = NO_ID;
     pthread_mutex_lock(&mutex);
-    i = THREAD_IDS[index];
+    i = SHARED_THREAD_IDS[index];
     pthread_mutex_unlock(&mutex);
     return i;
 }
@@ -118,72 +119,32 @@ void handle_broadcast(struct my_buffer *buff, struct my_thread_args *args){
     }
 }
 
-/* if the name passed in it in the array then return true */
-bool name_exists(char *name_string){
-    bool rc = false;
-    pthread_mutex_lock(&mutex);
-    for (int i = 0; i < MAX_USERS; i++) {
-        if(strcmp(name_string, LOGIN_NAMES[i]) == 0){
-            rc = true;
-            break;
-        }
-    }
-    pthread_mutex_unlock(&mutex);
-    return rc;
-}
-
-/* finds the next free index in the array of usernames */
-int next_free_name(){
-    int name = MAX_USERS;
-    
-    pthread_mutex_lock(&mutex);
-    
-    //Test the first character in each name, if it's not used then it's the next free name
-    for(int i = 0; i < MAX_USERS; i++){
-        if(LOGIN_NAMES[i][0] == 0){
-            name = i;
-            break;
-        }
-    }
-    pthread_mutex_unlock(&mutex);
-    return name;
-}
-
-/* inserts a new username in the array */
-bool insert_new_user_at_index(int index, char *name){
-    if(index >= MAX_USERS) { return false; }
-    pthread_mutex_lock(&mutex);
-    strcpy(LOGIN_NAMES[index], name);
-    pthread_mutex_unlock(&mutex);
-    return true;
-}
-
 /* log the user in if they are already registered */
 void handle_login(struct my_buffer *buff, char *c, int my_fd, int my_thread_index, bool *flag){
     
     //The command is in the form LOGIN <name>, so find the whitespace and use the string after as the username
     strtok(buff->buffer, " ");
-    char *space = strtok(NULL, " ");
+    char *sent_name = strtok(NULL, " ");
     
     const char
     *LOGIN_SUCCESS = "LOGIN successful",
-    *LOGIN_FAIL    = "LOGIN failed";
+    *LOGIN_FAIL    = "LOGIN failed - username not found";
     
     //log in if they are registered
-    if(name_exists(space)){
+    pthread_mutex_lock(&mutex);
+    
+    if(list_contains_name(&SHARED_NAMES_LIST, sent_name)){
         write(my_fd, LOGIN_SUCCESS, strlen(LOGIN_SUCCESS));
         
-        pthread_mutex_lock(&mutex);
-        strcpy(CURRENT_CONNECTIONS[my_thread_index].user_name, space);
-        CURRENT_CONNECTIONS[my_thread_index].socket_fd = my_fd;
-        pthread_mutex_unlock(&mutex);
-        
+        strcpy(SHARED_CURRENT_CONNECTIONS[my_thread_index].user_name, sent_name);
+        SHARED_CURRENT_CONNECTIONS[my_thread_index].socket_fd = my_fd;
         *flag = true;
     }
     //doesnt exist
     else{
         write(my_fd, LOGIN_FAIL, strlen(LOGIN_FAIL));
     }
+    pthread_mutex_unlock(&mutex);
     
 }
 
@@ -192,36 +153,32 @@ void handle_new_user(struct my_buffer *buff, char *c, int my_fd, int my_thread_i
     
     //The command is in the form NEWUSER <name>, so find the whitespace and use the string after as the username
     strtok(buff->buffer, " ");
-    char *space = strtok(NULL, " ");
+    char *sent_name = strtok(NULL, " ");
     
     const char
     *LOGIN_SUCCESS = "USER CREATION successful",
-    *LOGIN_FAIL    = "USER CREATION failed";
-    
-    int u = 0;
+    *LOGIN_FAIL    = "USER CREATION failed - username already exists, try logging in";
     
     //If there isn't a space found then dont bother trying to add
-    if(space){
+    if(sent_name){
         
-        //only add if the username doesn't already exist and there is room in the array
-        if(name_exists(space) || (u = next_free_name()) == MAX_USERS){
+        //only add if the username doesn't already exist
+        pthread_mutex_lock(&mutex);
+        if(list_contains_name(&SHARED_NAMES_LIST, sent_name)){
             write(my_fd, LOGIN_FAIL, strlen(LOGIN_FAIL));
         }
         else{
-            if(!insert_new_user_at_index(u, space)){
-                write(my_fd, LOGIN_FAIL, strlen(LOGIN_FAIL));
-                return;
-                
-            }
             
-            pthread_mutex_lock(&mutex);
-            strcpy(CURRENT_CONNECTIONS[my_thread_index].user_name, space);
-            CURRENT_CONNECTIONS[my_thread_index].socket_fd = my_fd;
-            pthread_mutex_unlock(&mutex);
+            list_add_name(&SHARED_NAMES_LIST, sent_name);
+            list_save(&SHARED_NAMES_LIST);
+            
+            strcpy(SHARED_CURRENT_CONNECTIONS[my_thread_index].user_name, sent_name);
+            SHARED_CURRENT_CONNECTIONS[my_thread_index].socket_fd = my_fd;
             
             write(my_fd, LOGIN_SUCCESS, strlen(LOGIN_SUCCESS));
             *logged_in_flag = true;
         }
+        pthread_mutex_unlock(&mutex);
     }
     else{
         write(my_fd, LOGIN_FAIL, strlen(LOGIN_FAIL));
@@ -234,8 +191,8 @@ int get_socket_for_user(char* user_name){
     pthread_mutex_lock(&mutex);
     
     for(int i = 0; i < NUM_MAX; i++){
-        if(strcmp(user_name, CURRENT_CONNECTIONS[i].user_name) == 0){
-            sock = CURRENT_CONNECTIONS[i].socket_fd;
+        if(strcmp(user_name, SHARED_CURRENT_CONNECTIONS[i].user_name) == 0){
+            sock = SHARED_CURRENT_CONNECTIONS[i].socket_fd;
         }
     }
     
@@ -246,7 +203,7 @@ int get_socket_for_user(char* user_name){
 //Get the user name at the index of the current connections
 void get_name_for_connection(int index, char *buff){
     pthread_mutex_lock(&mutex);
-    strcpy(buff, CURRENT_CONNECTIONS[index].user_name);
+    strcpy(buff, SHARED_CURRENT_CONNECTIONS[index].user_name);
     pthread_mutex_unlock(&mutex);
 }
 
@@ -272,8 +229,8 @@ void handle_message_send(struct my_buffer *buff, int my_client_fd, int my_thread
     get_name_for_connection(my_thread_id, origin_user);
     
     //construct messages
-    snprintf(reply, 1000, "SENT[%s]: %s\n", name_buff, msg);
-    snprintf(relay_msg, 1000, "RECD[%s]: %s\n", origin_user, msg);
+    snprintf(reply, 1000, "SENT[%s]: %s\n", name_buff, msg);        //echo to sender
+    snprintf(relay_msg, 1000, "RECD[%s]: %s\n", origin_user, msg);  //send to destination
     
     //Send the message if the desination user is connected
     int dest_fd = get_socket_for_user(name_buff);
@@ -294,8 +251,8 @@ void handle_list(int my_fd){
     pthread_mutex_lock(&mutex);
     
     for(int i = 0; i < NUM_MAX; i++){
-        if(CURRENT_CONNECTIONS[i].socket_fd != NOT_CONNECTED){
-            strcat(b, CURRENT_CONNECTIONS[i].user_name);
+        if(SHARED_CURRENT_CONNECTIONS[i].socket_fd != NOT_CONNECTED){
+            strcat(b, SHARED_CURRENT_CONNECTIONS[i].user_name);
             strcat(b, "\n");
         }
     }
@@ -328,10 +285,13 @@ void *connection_handler(void *ptr){
     //keep reading into the buffer until nothing is read anymore OR until the PING of BROADCAST commands are recieved
     while((read_size = recv(my_client_fd, buff.buffer, buff.max_size, 0)) > 0){
         
+        //The heartbeat ACK is not that important so in this case put it first
         if(strstr(buff.buffer, "BeatReply")){
+            /* put some handling here */
             printf("ACK recd\n");
             
         }
+        //A loggin in user has access to the commands of the chat
         else if(logged_in){
             if(strstr(buff.buffer, "PING")){
                 printf("ping recvd\n");
@@ -367,7 +327,17 @@ void *connection_handler(void *ptr){
             write(my_client_fd, "You must log in or create a new user", strlen("You must log in or create a new user"));
         }
         
-        
+        /*
+         clear buffer after the read in string is handled to prevent persistent messages eg
+         if a user sends 
+         
+         "NEWUSER helloyou" then 
+         "LOGIN helloyou", 
+         
+         the second message is shorter so the buffer will actually
+         contain "LOGIN helloyouou"!
+        */
+        memset(buff.buffer, 0, buff.max_size);
     }
     
     if(read_size == 0){
@@ -378,8 +348,8 @@ void *connection_handler(void *ptr){
         printf("disconnecting client\n");
     }
     
-    memset(CURRENT_CONNECTIONS[args->my_thread_id_index].user_name, 0, MAX_NAME_LEN);
-    CURRENT_CONNECTIONS[args->my_thread_id_index].socket_fd = 0;
+    memset(SHARED_CURRENT_CONNECTIONS[args->my_thread_id_index].user_name, 0, MAX_NAME_LEN);
+    SHARED_CURRENT_CONNECTIONS[args->my_thread_id_index].socket_fd = 0;
     
     //reset the thread id and client fd
     clear_client_id(args->client_fd_index);
@@ -400,7 +370,7 @@ void set_thread_id_at_index(pthread_t handler_thread, int index) {
     if(index >= NUM_MAX) { return; }
     
     pthread_mutex_lock(&mutex);
-    THREAD_IDS[index] = handler_thread;
+    SHARED_THREAD_IDS[index] = handler_thread;
     pthread_mutex_unlock(&mutex);
 }
 
@@ -409,7 +379,7 @@ void set_client_fd_at_index(int client_fd, int index) {
     if(index >= NUM_MAX) { return; }
     
     pthread_mutex_lock(&mutex);
-    CLIENT_IDS[index] = client_fd;
+    SHARED_CLIENT_IDS[index] = client_fd;
     pthread_mutex_unlock(&mutex);
 }
 
@@ -433,9 +403,30 @@ void *heartbeat_thread(){
     }
 }
 
+
+
+void test_bench(){
+    struct my_name_list *n = list_init(MAX_NAME_LEN, "usernames.txt");
+    
+    list_add_name(&n, "PoopBum");
+    list_add_name(&n, "Bumper");
+    list_populate(&n);
+    bool m = list_contains_name(&n, "Poohole");
+    bool mm = list_contains_name(&n, "Anus");
+    list_add_name(&n, "Anus");
+    list_print(&n);
+    
+    list_save(&n);
+    
+    list_destroy(&n);
+
+    exit(EXIT_SUCCESS);
+}
+
 int main(void){
     
     printf("Starting program\n");
+    //test_bench();
     
     const int PORT_NUM = 51718;
     int       server_fd, client_fd;
@@ -444,15 +435,12 @@ int main(void){
     
     //init shared resources
     for(int i = 0; i < NUM_MAX; i++){
-        CLIENT_IDS[i] = NOT_CONNECTED;
-        THREAD_IDS[i] = NO_ID;
+        SHARED_CLIENT_IDS[i] = NOT_CONNECTED;
+        SHARED_THREAD_IDS[i] = NO_ID;
     }
     
-    for(int i = 0; i < MAX_USERS; i++){
-        LOGIN_NAMES[i] = calloc(MAX_NAME_LEN, sizeof(char));
-        if(!LOGIN_NAMES[i]) { KILL("Calloc Error\n"); }
-    }
-    
+    SHARED_NAMES_LIST = list_init(MAX_NAME_LEN, "usernames.txt");
+    list_populate(&SHARED_NAMES_LIST);
     
     //TCP IP Server
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -498,11 +486,6 @@ int main(void){
         
     }
     
-    // ----- shut down safely ----
-    for(int i = 0; i < MAX_USERS; i++){
-        free(LOGIN_NAMES[i]);
-    }
-    
     //wait for all threads to finish
     for(int i = 0; i < NUM_MAX; i++){
         pthread_join(get_thread_id_at_index(i), NULL);
@@ -512,5 +495,7 @@ int main(void){
     pthread_join(heartbeat, NULL);
     
     pthread_mutex_destroy(&mutex);
+    
+    list_destroy(&SHARED_NAMES_LIST);
     exit(EXIT_SUCCESS);
 }

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		D81DFE601CFB598100BDFA22 /* main.c in Sources */ = {isa = PBXBuildFile; fileRef = D81DFE5F1CFB598100BDFA22 /* main.c */; };
+		D8A5634B1CFC204300FE25D9 /* linked_list.c in Sources */ = {isa = PBXBuildFile; fileRef = D8A563491CFC204300FE25D9 /* linked_list.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -25,6 +26,9 @@
 /* Begin PBXFileReference section */
 		D81DFE5C1CFB598100BDFA22 /* ChatServer */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = ChatServer; sourceTree = BUILT_PRODUCTS_DIR; };
 		D81DFE5F1CFB598100BDFA22 /* main.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = main.c; sourceTree = "<group>"; };
+		D8A563481CFB88C500FE25D9 /* usernames.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = usernames.txt; sourceTree = "<group>"; };
+		D8A563491CFC204300FE25D9 /* linked_list.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = linked_list.c; path = ../linked_list.c; sourceTree = "<group>"; };
+		D8A5634A1CFC204300FE25D9 /* linked_list.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = linked_list.h; path = ../linked_list.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -43,6 +47,7 @@
 			children = (
 				D81DFE5E1CFB598100BDFA22 /* ChatServer */,
 				D81DFE5D1CFB598100BDFA22 /* Products */,
+				D8A563481CFB88C500FE25D9 /* usernames.txt */,
 			);
 			sourceTree = "<group>";
 		};
@@ -57,6 +62,8 @@
 		D81DFE5E1CFB598100BDFA22 /* ChatServer */ = {
 			isa = PBXGroup;
 			children = (
+				D8A563491CFC204300FE25D9 /* linked_list.c */,
+				D8A5634A1CFC204300FE25D9 /* linked_list.h */,
 				D81DFE5F1CFB598100BDFA22 /* main.c */,
 			);
 			path = ChatServer;
@@ -118,6 +125,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D8A5634B1CFC204300FE25D9 /* linked_list.c in Sources */,
 				D81DFE601CFB598100BDFA22 /* main.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -239,6 +247,7 @@
 				D81DFE651CFB598100BDFA22 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};

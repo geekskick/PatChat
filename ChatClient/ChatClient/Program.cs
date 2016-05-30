@@ -193,6 +193,11 @@ namespace ChatClient
 					SendUsingSharedStream (command);
 					break;
 
+				case "LOGOUT":
+
+					Console.WriteLine ("Command not handled ... yet");
+					break;
+
 				default:
 					Console.WriteLine ("Invalid Command Typed");
 					break;

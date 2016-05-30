@@ -2,7 +2,7 @@
   <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug|x86" />
   <MonoDevelop.Ide.Workbench ActiveDocument="ChatClient/Program.cs">
     <Files>
-      <File FileName="ChatClient/Program.cs" Line="136" Column="19" />
+      <File FileName="ChatClient/Program.cs" Line="191" Column="17" />
     </Files>
   </MonoDevelop.Ide.Workbench>
   <MonoDevelop.Ide.DebuggingService.Breakpoints>

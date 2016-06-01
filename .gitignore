@@ -1,0 +1,10 @@
+
+*.mdb
+
+*.exe
+
+*.xcuserstate
+
+*.xcbkptlist
+
+*.userprefs

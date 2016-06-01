@@ -21,8 +21,7 @@
 
 struct my_thread_args{
     int my_thread_id_index;
-    int client_fd_index;
-    struct my_name_list **list_of_users;
+    int current_connection_index;
 };
 
 struct my_buffer{
@@ -33,19 +32,18 @@ struct my_buffer{
 struct my_connection{
     char user_name[MAX_NAME_LEN];
     int socket_fd;
+    pthread_t my_thread_id;
 };
 
 
 // ===== SHARED RESOURCES =====
 pthread_mutex_t mutex;
-int SHARED_CLIENT_IDS[NUM_MAX];
 pthread_t SHARED_THREAD_IDS[NUM_MAX];
-struct my_connection SHARED_CURRENT_CONNECTIONS[NUM_MAX];
+struct my_connection SHARED_CURRENT_CONNECTIONS[NUM_MAX]; //memory alreasy allocated on stack  so no need to calloc of malloc
 struct my_name_list *SHARED_NAMES_LIST = NULL;
 
 // ===== DECLARATIONS ========
-void clear_client_id(int index);
-void clear_thread_id(int index);
+void clear_connection_at_index(int index);
 int get_client_fd_at_index(int index);
 pthread_t get_thread_id_at_index(int index);
 void handle_ping(int client_fd);
@@ -53,7 +51,7 @@ void handle_login(struct my_buffer *buff, char *c, int my_fd, int my_thread_inde
 void handle_new_user(struct my_buffer *buff, char *c, int my_fd, int my_thread_index, bool *logged_in_flag);
 void handle_broadcast(struct my_buffer *buff, struct my_thread_args *args);
 int get_socket_for_user(char* user_name);
-void get_name_for_connection(int index, char *buff);
+void get_name_for_connection_at_index(int index, char *buff);
 void handle_message_send(struct my_buffer *buff, int my_client_fd, int my_thread_id);
 void handle_list(int my_fd);
 void *connection_handler(void *ptr);
@@ -62,30 +60,27 @@ void set_client_fd_at_index(int client_fd, int index);
 
 // ===== FUNCTIONS ======
 /* make the client at the specififed index not connected */
-void clear_client_id(int index){
+void clear_connection_at_index(int index){
     if(index >= NUM_MAX) { return; }
     
     pthread_mutex_lock(&mutex);
-    SHARED_CLIENT_IDS[index] = NOT_CONNECTED;
+    
+    SHARED_CURRENT_CONNECTIONS[index].socket_fd = NOT_CONNECTED;
+    memset(SHARED_CURRENT_CONNECTIONS[index].user_name, 0, MAX_NAME_LEN);
+    SHARED_CURRENT_CONNECTIONS[index].my_thread_id = NO_ID;
+    
     pthread_mutex_unlock(&mutex);
     
 }
 
-/* make the thread at the specififed index not active */
-void clear_thread_id(int index){
-    if(index >= NUM_MAX) { return; }
-    
-    pthread_mutex_lock(&mutex);
-    SHARED_THREAD_IDS[index] = NO_ID;
-    pthread_mutex_unlock(&mutex);
-}
 
 /* get the client ID from the array of current clients */
 int get_client_fd_at_index(int index){
     if(index >= NUM_MAX){ return NOT_CONNECTED; }
     int i = NOT_CONNECTED;
+    
     pthread_mutex_lock(&mutex);
-    i = SHARED_CLIENT_IDS[index];
+    i = SHARED_CURRENT_CONNECTIONS[index].socket_fd;
     pthread_mutex_unlock(&mutex);
     return i;
 }
@@ -96,7 +91,7 @@ pthread_t get_thread_id_at_index(int index){
     
     pthread_t i = NO_ID;
     pthread_mutex_lock(&mutex);
-    i = SHARED_THREAD_IDS[index];
+    i = SHARED_CURRENT_CONNECTIONS[index].my_thread_id;
     pthread_mutex_unlock(&mutex);
     return i;
 }
@@ -119,6 +114,7 @@ void handle_broadcast(struct my_buffer *buff, struct my_thread_args *args){
     }
 }
 
+
 /* log the user in if they are already registered */
 void handle_login(struct my_buffer *buff, char *c, int my_fd, int my_thread_index, bool *flag){
     
@@ -136,6 +132,7 @@ void handle_login(struct my_buffer *buff, char *c, int my_fd, int my_thread_inde
     if(list_contains_name(&SHARED_NAMES_LIST, sent_name)){
         write(my_fd, LOGIN_SUCCESS, strlen(LOGIN_SUCCESS));
         
+        //as the mutex is already locked this is handled here rather than an accessor function
         strcpy(SHARED_CURRENT_CONNECTIONS[my_thread_index].user_name, sent_name);
         SHARED_CURRENT_CONNECTIONS[my_thread_index].socket_fd = my_fd;
         *flag = true;
@@ -172,6 +169,7 @@ void handle_new_user(struct my_buffer *buff, char *c, int my_fd, int my_thread_i
             list_add_name(&SHARED_NAMES_LIST, sent_name);
             list_save(&SHARED_NAMES_LIST);
             
+            //as the mutex is already locked this is handled here rather than an accessor function
             strcpy(SHARED_CURRENT_CONNECTIONS[my_thread_index].user_name, sent_name);
             SHARED_CURRENT_CONNECTIONS[my_thread_index].socket_fd = my_fd;
             
@@ -201,7 +199,7 @@ int get_socket_for_user(char* user_name){
 }
 
 //Get the user name at the index of the current connections
-void get_name_for_connection(int index, char *buff){
+void get_name_for_connection_at_index(int index, char *buff){
     pthread_mutex_lock(&mutex);
     strcpy(buff, SHARED_CURRENT_CONNECTIONS[index].user_name);
     pthread_mutex_unlock(&mutex);
@@ -226,7 +224,7 @@ void handle_message_send(struct my_buffer *buff, int my_client_fd, int my_thread
     //Get the origin user's name
     char reply[1000] = { 0, }, relay_msg[1000] = { 0, };
     char origin_user[MAX_NAME_LEN] = { 0, };
-    get_name_for_connection(my_thread_id, origin_user);
+    get_name_for_connection_at_index(my_thread_id, origin_user);
     
     //construct messages
     snprintf(reply, 1000, "SENT[%s]: %s\n", name_buff, msg);        //echo to sender
@@ -278,7 +276,7 @@ void *connection_handler(void *ptr){
     //printf("thread_ids[%d] = %d\n", args->my_id, args->all_ids[args->my_id]);
     
     long read_size = 0;
-    int my_client_fd = get_client_fd_at_index(args->client_fd_index);
+    int my_client_fd = get_client_fd_at_index(args->current_connection_index);
     char *c = NULL;
     bool logged_in = false;
     
@@ -348,12 +346,9 @@ void *connection_handler(void *ptr){
         printf("disconnecting client\n");
     }
     
-    memset(SHARED_CURRENT_CONNECTIONS[args->my_thread_id_index].user_name, 0, MAX_NAME_LEN);
-    SHARED_CURRENT_CONNECTIONS[args->my_thread_id_index].socket_fd = 0;
     
-    //reset the thread id and client fd
-    clear_client_id(args->client_fd_index);
-    clear_thread_id(args->my_thread_id_index);
+    //reset the thread id and current connection
+    clear_connection_at_index(args->current_connection_index);
     
     //free memory
     free(args);
@@ -370,7 +365,7 @@ void set_thread_id_at_index(pthread_t handler_thread, int index) {
     if(index >= NUM_MAX) { return; }
     
     pthread_mutex_lock(&mutex);
-    SHARED_THREAD_IDS[index] = handler_thread;
+    SHARED_CURRENT_CONNECTIONS[index].my_thread_id = handler_thread;
     pthread_mutex_unlock(&mutex);
 }
 
@@ -379,7 +374,7 @@ void set_client_fd_at_index(int client_fd, int index) {
     if(index >= NUM_MAX) { return; }
     
     pthread_mutex_lock(&mutex);
-    SHARED_CLIENT_IDS[index] = client_fd;
+    SHARED_CURRENT_CONNECTIONS[index].socket_fd = client_fd;
     pthread_mutex_unlock(&mutex);
 }
 
@@ -435,8 +430,8 @@ int main(void){
     
     //init shared resources
     for(int i = 0; i < NUM_MAX; i++){
-        SHARED_CLIENT_IDS[i] = NOT_CONNECTED;
-        SHARED_THREAD_IDS[i] = NO_ID;
+        SHARED_CURRENT_CONNECTIONS[i].socket_fd    = NOT_CONNECTED;
+        SHARED_CURRENT_CONNECTIONS[i].my_thread_id = NO_ID;
     }
     
     SHARED_NAMES_LIST = list_init(MAX_NAME_LEN, "usernames.txt");
@@ -479,7 +474,7 @@ int main(void){
         //construct thread args, free'd in the thread
         struct my_thread_args *args = calloc(1, sizeof(args));
         args->my_thread_id_index = current_id;
-        args->client_fd_index = current_client;
+        args->current_connection_index = current_client;
         
         //return -1 if error
         if(pthread_create(&handler_thread, NULL, connection_handler, (void*)args) < 0){ KILL("Thread creation"); }

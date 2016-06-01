@@ -51,7 +51,8 @@ Send a message to the user specified, this is echo'd to the sender
 ##To Improve
 - Dynamic commands, maybe from a setup file etc
 - Server
-  * The connected clients' file descriptors are stored in an array, so are the current thread ids, however there is also a struct for each connection which contains the clients' file descriptors too. This struct should detail the connection's thread id, and that struct should be used rather than the arrays of client fd and thread ids
+  - [X] Connected client FD in a struct with their username too.
+  - [X] Thread ID's stored in a separate array - should be in the `CURRENT_CONNECTIONS` array or structs
   - [ ] The server doesn't act on the heartbeat ACK from the clients, either remover it or find a use for it
   - [ ] The server had no way of being quit once it's running, so although the code in place to free memory used and join the threads, it's never used
   - [ ] Refactor the source code into different files

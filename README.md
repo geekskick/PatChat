@@ -1,5 +1,5 @@
 # PatChat
-Simple Chatting Application, with a server written in C, and Client in C#
+Simple Chatting Application, with a server written in C, and Client in C++
 
 ##Features
 1. Heartbeat from server to Clients connected every 5-ish seconds
@@ -66,8 +66,9 @@ Client acknowledge heartbeat
   - [ ] Refactor the source code into different files
   - [ ] Dynamic list of usernames which can grow/shink as clients connect
   - [X] Saving usernames to a file for later re-use
+  - [ ] Options Flags
 - Client
-  - [ ] If running for ages the garbage collector throws an error as it's unable to allocated some memory - not sure yet where it's being allocated.
-  - [ ] GUI would be nice, failing that a more smart console interface __ IN PRGORESS __
+  - [ ] ~~If running for ages the garbage collector throws an error as it's unable to allocated some memory - not sure yet where it's being allocated.~~ Doesn't seem to be present in QT Gui
+  - [X] GUI would be nice, failing that a more smart console interface
   - [ ] LOGOUT command
   - [ ] ~~Some client side checking of the replies from the Server or the input commands~~ Server side does the checking so this is pointless extra processing

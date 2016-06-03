@@ -36,3 +36,7 @@ build-QTChatClient-Desktop_Qt_5_6_0_clang_64bit-Debug/Makefile
 build-QTChatClient-Desktop_Qt_5_6_0_clang_64bit-Debug/moc_chatclient.cpp
 
 build-QTChatClient-Desktop_Qt_5_6_0_clang_64bit-Debug/moc_chatserver.cpp
+
+*.user
+
+*.xcuserstate

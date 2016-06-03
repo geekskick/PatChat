@@ -72,10 +72,13 @@ void ChatClient::inputServerDetails(){
 }
 
 void ChatClient::enableChat(bool chatEnabled){
+
     ui->pushButton_closeConn->setEnabled(chatEnabled);
     ui->textBrowser_output->setEnabled(chatEnabled);
+    ui->pushButton_reconnect->setEnabled(!chatEnabled);
     ui->lineEdit_input->setEnabled(chatEnabled);
     ui->pushButton_send->setEnabled(chatEnabled);
+
 }
 
 

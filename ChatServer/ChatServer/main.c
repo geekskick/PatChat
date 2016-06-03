@@ -217,8 +217,10 @@ void handle_message_send(struct my_buffer *buff, int my_client_fd, int my_thread
     strtok(buff->buffer, "$");
     char *dest = strtok(NULL, "$");
     
+    const char *USAGE_MSG = "Usage: SEND $<name> <message to send>";
+    
     //if the user didn't enter the command in the form SEND $<user> <msg> then reminde them to use a $
-    if(!dest){ write(my_client_fd, "$$$$", strlen("$$$$")); return; }
+    if(!dest){ write(my_client_fd, USAGE_MSG, strlen(USAGE_MSG)); return; }
     
     char name_buff[MAX_NAME_LEN] = { 0, };
     
@@ -231,10 +233,21 @@ void handle_message_send(struct my_buffer *buff, int my_client_fd, int my_thread
     char reply[1000] = { 0, }, relay_msg[1000] = { 0, };
     char origin_user[MAX_NAME_LEN] = { 0, };
     get_name_for_connection_at_index(my_thread_id, origin_user);
+
+    sprintf(reply,"SENT[%s]: ", name_buff);         //initialise the echo message and message to relay
+    sprintf(relay_msg, "RECD[%s]: ", origin_user);
     
-    //construct messages
-    snprintf(reply, 1000, "SENT[%s]: %s\n", name_buff, msg);        //echo to sender
-    snprintf(relay_msg, 1000, "RECD[%s]: %s\n", origin_user, msg);  //send to destination
+    // The white space in the message means it can't be a simple strcpy over once, so
+    // the array must be iterated over adding each word at a time - until there is no more whitespace found
+    
+    while(msg != NULL){
+        strcat(relay_msg, " "); //put a gap before the next word added to preserve whitespace
+        strcat(reply, " ");
+        strcat(relay_msg, msg); //add next word
+        strcat(reply, msg);
+        msg = strtok(NULL, " "); //advance to next whitespace location
+    }
+
     
     //Send the message if the desination user is connected
     int dest_fd = get_socket_for_user(name_buff);
@@ -243,7 +256,7 @@ void handle_message_send(struct my_buffer *buff, int my_client_fd, int my_thread
     }
     else{
         printf("%s\n", reply);
-        write(my_client_fd, reply, strlen(reply)); //echo to sender
+        write(my_client_fd, reply, strlen(reply));      //echo to sender
         write(dest_fd, relay_msg, strlen(relay_msg));
     }
 }
@@ -251,9 +264,14 @@ void handle_message_send(struct my_buffer *buff, int my_client_fd, int my_thread
 /* Create a list of currently connected usernames and send them to the client */
 void handle_list(int my_fd){
     
-    char b[MAX_NAME_LEN * (NUM_MAX + 1)] = { 0, };
+    const char *HEADER_MSG = "Currently connected are:\n";
+    
+    char b[MAX_NAME_LEN * (NUM_MAX + 1) + 30] = { 0, }; //30 characters should be enough to keep the header line in, no need to malloc a small amount only
+    strcat(b, HEADER_MSG);
+    
     pthread_mutex_lock(&mutex);
     
+    //Add new line to the list for each user connected
     for(int i = 0; i < NUM_MAX; i++){
         if(SHARED_CURRENT_CONNECTIONS[i].socket_fd != NOT_CONNECTED){
             strcat(b, SHARED_CURRENT_CONNECTIONS[i].user_name);
@@ -262,6 +280,13 @@ void handle_list(int my_fd){
     }
     
     pthread_mutex_unlock(&mutex);
+    
+    //remover final new line to keep it pretty for the client
+    char *last_known_nl = strrchr(b, '\n');
+    if(last_known_nl){
+        *last_known_nl = '\0';
+    }
+    
     
     write(my_fd, b, strlen(b));
     

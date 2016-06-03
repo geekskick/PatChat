@@ -73,6 +73,10 @@ Client acknowledge heartbeat
   - [ ] LOGOUT command
   - [ ] ~~Some client side checking of the replies from the Server or the input commands~~ Server side does the checking so this is pointless extra processing
 
+##Server Design
+Although the server doesn't use 'state's, the following diagram helps to explain what it does
+<img src ="ChatServer/ServerStates.png" >
+
 ##GUI Images
 <img src ="QTChatClient/Images/onOpen.png" width = 150>
 <img src ="QTChatClient/Images/onConnect.png" width = 150>

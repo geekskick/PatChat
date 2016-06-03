@@ -1,5 +1,5 @@
 # PatChat
-Simple Chatting Application, with a server written in C, and Client in C++
+Simple Chatting Application, with a server written in C, and Client in C++ and C#
 
 ##Features
 1. Heartbeat from server to Clients connected every 5-ish seconds
@@ -61,7 +61,7 @@ Client acknowledge heartbeat
 - Server
   - [X] Connected client FD in a struct with their username too.
   - [X] Thread ID's stored in a separate array - should be in the `CURRENT_CONNECTIONS` array or structs
-  - [ ] The server doesn't act on the heartbeat ACK from the clients, either remover it or find a use for it
+  - [ ] The server doesn't act on the heartbeat ACK from the clients, either remove it or find a use for it
   - [ ] The server had no way of being quit once it's running, so although the code in place to free memory used and join the threads, it's never used
   - [ ] Refactor the source code into different files
   - [ ] Dynamic list of usernames which can grow/shink as clients connect

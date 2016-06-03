@@ -18,6 +18,7 @@ ChatClient::ChatClient(QWidget *parent) :
     this->connect(ui->pushButton_closeConn, SIGNAL(pressed()), server, SLOT(disconnectSocket()));
     this->connect(ui->pushButton_quit, SIGNAL(pressed()), this, SLOT(close()));
     this->connect(this, SIGNAL(chatOn(bool)), this, SLOT(enableChat(bool)));
+    this->connect(this, SIGNAL(heartbeatRecd()), server, SLOT(handleHeartbeat()));
 
 }
 
@@ -31,7 +32,14 @@ void ChatClient::sendClicked(){
 }
 
 void ChatClient::updateTextOutput(){
-    ui->textBrowser_output->append(server->readAll());
+    QString msg = server->readAll();
+
+    if(msg == "BEAT"){
+        emit heartbeatRecd();
+    }
+    else{
+        ui->textBrowser_output->append(msg);
+    }
 }
 
 ChatClient::~ChatClient()
@@ -70,19 +78,7 @@ void ChatClient::enableChat(bool chatEnabled){
     ui->pushButton_send->setEnabled(chatEnabled);
 }
 
-bool ChatClient::checkTextInput(QString msg){
-    QStringList cmds = msg.split(" ", QString::SplitBehavior::SkipEmptyParts);
-    bool rc = false;
-    if(cmds.length() > 0){
-        qDebug() << cmds[ChatServer::COMMAND] << ChatServer::getValidCommands();
 
-        if(validCommands.contains(cmds[ChatServer::COMMAND])){
-            rc =  true;
-        }
-    }
-
-    return rc;
-}
 
 void ChatClient::updateStatus(QAbstractSocket::SocketState s){
 

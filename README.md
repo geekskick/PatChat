@@ -8,7 +8,7 @@ Simple Chatting Application, with a server written in C, and Client in C#
 4. Create username
 5. Login as a user
 6. List all connected users
-7. Ten unique usernames
+7. Endless unique usernames of up to ten characters
 8. Up to 5 clients connected at once
 9. Server ping
 
@@ -42,6 +42,14 @@ Get a PONG from the server
 Usage: SEND $(user) (msg)
 
 Send a message to the user specified, this is echo'd to the sender
+
+**BEAT**
+
+HEart beat sent from server to clients
+
+**ACK**
+
+Client acknowledge heartbeat
 
 ##Challenges
 - Client recieve. The client must listen all the time for an incoming message from the server. To overcome this a thread is created which listens all the time, by using an Asynchronous `NetworkStream.BeginRead()` in a while loop. 

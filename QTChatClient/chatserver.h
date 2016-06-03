@@ -27,6 +27,7 @@ public slots:
     void connectToServer();
     void setIPAddressAndPort(QString ip, int port);
     void disconnectSocket();
+    void handleHeartbeat();
 
 };
 

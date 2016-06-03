@@ -292,7 +292,7 @@ void *connection_handler(void *ptr){
         printf("recd: %s\n", buff.buffer);
         
         //The heartbeat ACK is not that important so in this case put it first
-        if(strstr(buff.buffer, "BeatReply")){
+        if(strstr(buff.buffer, "ACK")){
             /* put some handling here */
             printf("ACK recd\n");
             
@@ -398,7 +398,7 @@ void *heartbeat_thread(){
             int f;
             if((f = get_client_fd_at_index(i)) != NOT_CONNECTED){
                 printf("Heartbeat to %d\n", f);
-                write(f, "Beat", strlen("Beat"));
+                write(f, "BEAT", strlen("Beat"));
             }
         }
         

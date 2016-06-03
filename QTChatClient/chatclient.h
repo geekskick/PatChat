@@ -39,7 +39,6 @@ private slots:
     void updateStatus(QAbstractSocket::SocketError);
     void sendClicked();
     void updateTextOutput();
-    bool checkTextInput(QString msg);
     void enableChat(bool);
 
 private:

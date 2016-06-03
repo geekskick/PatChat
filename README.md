@@ -72,3 +72,10 @@ Client acknowledge heartbeat
   - [X] GUI would be nice, failing that a more smart console interface
   - [ ] LOGOUT command
   - [ ] ~~Some client side checking of the replies from the Server or the input commands~~ Server side does the checking so this is pointless extra processing
+
+##GUI Images
+<img src ="QTChatClient/Images/onOpen.png" width = 150>
+<img src ="QTChatClient/Images/onConnect.png" width = 150>
+<img src ="QTChatClient/Images/onOptions.png" width = 150>
+<img src ="QTChatClient/Images/onInitialMsg.png" width = 150>
+<img src ="QTChatClient/Images/onUse.png" width = 150>

@@ -48,3 +48,5 @@ ChatServer/ChatServer.xcodeproj/project.xcworkspace/xcuserdata/patrickmintram.xc
 ChatClient/ChatClient/obj/x86/Debug/ChatClient.csproj.FilesWrittenAbsolute.txt
 
 ChatClient/ChatClient/obj/x86/Debug/ChatClient.csproj.FilesWrittenAbsolute.txt
+
+QTChatClient/QTChatClient.pro.user

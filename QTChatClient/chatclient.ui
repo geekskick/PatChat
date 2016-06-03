@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>400</width>
-    <height>451</height>
+    <height>424</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -18,28 +18,21 @@
     <property name="geometry">
      <rect>
       <x>0</x>
-      <y>20</y>
+      <y>10</y>
       <width>401</width>
-      <height>371</height>
+      <height>381</height>
      </rect>
     </property>
     <layout class="QVBoxLayout" name="verticalLayout">
      <item>
-      <widget class="QLineEdit" name="lineEdit_input">
-       <property name="enabled">
-        <bool>false</bool>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QTextBrowser" name="textBrowser_output">
-       <property name="enabled">
-        <bool>false</bool>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <layout class="QHBoxLayout" name="horizontalLayout">
+      <layout class="QHBoxLayout" name="horizontalLayout_2">
+       <item>
+        <widget class="QLineEdit" name="lineEdit_input">
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+        </widget>
+       </item>
        <item>
         <widget class="QPushButton" name="pushButton_send">
          <property name="enabled">
@@ -50,6 +43,17 @@
          </property>
         </widget>
        </item>
+      </layout>
+     </item>
+     <item>
+      <widget class="QTextBrowser" name="textBrowser_output">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <layout class="QHBoxLayout" name="horizontalLayout">
        <item>
         <widget class="QPushButton" name="pushButton_closeConn">
          <property name="enabled">
@@ -67,6 +71,13 @@
          </property>
         </widget>
        </item>
+       <item>
+        <widget class="QPushButton" name="pushButton_options">
+         <property name="text">
+          <string>Options</string>
+         </property>
+        </widget>
+       </item>
       </layout>
      </item>
      <item>
@@ -79,23 +90,6 @@
     </layout>
    </widget>
   </widget>
-  <widget class="QMenuBar" name="menuBar">
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>0</y>
-     <width>400</width>
-     <height>22</height>
-    </rect>
-   </property>
-   <widget class="QMenu" name="menu_File">
-    <property name="title">
-     <string>&amp;File</string>
-    </property>
-    <addaction name="action_Server"/>
-   </widget>
-   <addaction name="menu_File"/>
-  </widget>
   <widget class="QToolBar" name="mainToolBar">
    <attribute name="toolBarArea">
     <enum>TopToolBarArea</enum>
@@ -105,34 +99,10 @@
    </attribute>
   </widget>
   <widget class="QStatusBar" name="statusBar"/>
-  <action name="action_Server">
-   <property name="text">
-    <string>&amp;Server</string>
-   </property>
-   <property name="toolTip">
-    <string>Server Connect</string>
-   </property>
-  </action>
  </widget>
  <layoutdefault spacing="6" margin="11"/>
  <resources/>
  <connections>
-  <connection>
-   <sender>action_Server</sender>
-   <signal>triggered()</signal>
-   <receiver>ChatClient</receiver>
-   <slot>inputServerDetails()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>-1</x>
-     <y>-1</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>199</x>
-     <y>225</y>
-    </hint>
-   </hints>
-  </connection>
   <connection>
    <sender>pushButton_reconnect</sender>
    <signal>clicked()</signal>
@@ -178,6 +148,22 @@
     <hint type="destinationlabel">
      <x>199</x>
      <y>225</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushButton_options</sender>
+   <signal>clicked()</signal>
+   <receiver>ChatClient</receiver>
+   <slot>inputServerDetails()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>330</x>
+     <y>345</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>199</x>
+     <y>211</y>
     </hint>
    </hints>
   </connection>

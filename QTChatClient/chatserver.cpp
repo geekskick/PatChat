@@ -33,9 +33,11 @@ void ChatServer::connectToServer(){
     this->waitForConnected();
 }
 
-
 QStringList ChatServer::getValidCommands(){
     QStringList l = { "LOGIN", "NEWUSER", "PING", "SEND", "LOGOUT" };
     return l;
 }
 
+void ChatServer::handleHeartbeat(){
+    this->write(QString("ACK").toUtf8());
+}

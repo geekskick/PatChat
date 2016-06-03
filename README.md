@@ -60,6 +60,6 @@ Send a message to the user specified, this is echo'd to the sender
   - [X] Saving usernames to a file for later re-use
 - Client
   - [ ] If running for ages the garbage collector throws an error as it's unable to allocated some memory - not sure yet where it's being allocated.
-  - [ ] GUI would be nice, failing that a more smart console interface
+  - [ ] GUI would be nice, failing that a more smart console interface __ IN PRGORESS __
   - [ ] LOGOUT command
-  - [ ] Some client side checking of the replies from the Server or the input commands
+  - [ ] ~~Some client side checking of the replies from the Server or the input commands~~ Server side does the checking so this is pointless extra processing

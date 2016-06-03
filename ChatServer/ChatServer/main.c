@@ -129,13 +129,19 @@ void handle_login(struct my_buffer *buff, char *c, int my_fd, int my_thread_inde
     //log in if they are registered
     pthread_mutex_lock(&mutex);
     
-    if(list_contains_name(&SHARED_NAMES_LIST, sent_name)){
-        write(my_fd, LOGIN_SUCCESS, strlen(LOGIN_SUCCESS));
-        
-        //as the mutex is already locked this is handled here rather than an accessor function
-        strcpy(SHARED_CURRENT_CONNECTIONS[my_thread_index].user_name, sent_name);
-        SHARED_CURRENT_CONNECTIONS[my_thread_index].socket_fd = my_fd;
-        *flag = true;
+    //if the user sends LOGIN and no name the sent_name pointer will be NULL, causing an error in the linked list library, so check before it's sent for checking
+    if(sent_name){
+        if(list_contains_name(&SHARED_NAMES_LIST, sent_name)){
+            write(my_fd, LOGIN_SUCCESS, strlen(LOGIN_SUCCESS));
+            
+            //as the mutex is already locked this is handled here rather than an accessor function
+            strcpy(SHARED_CURRENT_CONNECTIONS[my_thread_index].user_name, sent_name);
+            SHARED_CURRENT_CONNECTIONS[my_thread_index].socket_fd = my_fd;
+            *flag = true;
+        }
+        else{
+            write(my_fd, LOGIN_FAIL, strlen(LOGIN_FAIL));
+        }
     }
     //doesnt exist
     else{
@@ -282,6 +288,8 @@ void *connection_handler(void *ptr){
     
     //keep reading into the buffer until nothing is read anymore OR until the PING of BROADCAST commands are recieved
     while((read_size = recv(my_client_fd, buff.buffer, buff.max_size, 0)) > 0){
+        
+        printf("recd: %s\n", buff.buffer);
         
         //The heartbeat ACK is not that important so in this case put it first
         if(strstr(buff.buffer, "BeatReply")){

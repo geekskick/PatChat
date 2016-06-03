@@ -17,15 +17,18 @@ int MAX_NAME_LEN = 0;
 bool list_contains_name(struct my_name_list **head, const char *name_to_find){
     
     struct my_name_list* current_node = *head;
-    if(strcmp(name_to_find, current_node->name) == 0){
-        return true;
+    
+    if(name_to_find){
+        if(strcmp(name_to_find, current_node->name) == 0){
+            return true;
+        }
+        else if(current_node->next){
+            return list_contains_name(&(current_node->next), name_to_find);
+        }
     }
-    else if(current_node->next){
-        return list_contains_name(&(current_node->next), name_to_find);
-    }
-    else{
-        return false;
-    }
+    
+    return false;
+    
 }
 
 //writes the link list contents to a file in the

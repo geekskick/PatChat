@@ -17,7 +17,7 @@ ChatClient::ChatClient(QWidget *parent) :
     this->connect(server, SIGNAL(readyRead()), this, SLOT(updateTextOutput()));
     this->connect(ui->pushButton_closeConn, SIGNAL(pressed()), server, SLOT(disconnectSocket()));
     this->connect(ui->pushButton_quit, SIGNAL(pressed()), this, SLOT(close()));
-    this->connect(this, SIGNAL(chatOn(bool)), this, SLOT(enableChat(bool)));
+    this->connect(this, SIGNAL(chatChangedState(bool)), this, SLOT(enableChat(bool)));
     this->connect(this, SIGNAL(heartbeatRecd()), server, SLOT(handleHeartbeat()));
 
 }
@@ -108,7 +108,7 @@ void ChatClient::updateStatus(QAbstractSocket::SocketState s){
     ui->pushButton_reconnect->setText(buttonText);
     ui->statusBar->showMessage(msg, 5000);
 
-    emit chatOn(chatEnabled);
+    emit chatChangedState(chatEnabled);
 
 
 }
@@ -126,4 +126,5 @@ void ChatClient::updateStatus(QAbstractSocket::SocketError e){
 
 void ChatClient::connectToServer(){
     server->connectToServer();
+    ui->textBrowser_output->clear();
 }

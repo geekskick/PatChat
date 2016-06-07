@@ -29,7 +29,7 @@ public:
 
 signals:
     void destinationDetailsChanged(QString ip, int port);
-    void chatOn(bool enabled);
+    void chatChangedState(bool enabled);
     void heartbeatRecd();
 
 private slots:

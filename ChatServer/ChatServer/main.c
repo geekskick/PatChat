@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #include <errno.h>
 #include <unistd.h>
+#include <assert.h>
 #include <arpa/inet.h>
 
 #include "linked_list.h"
@@ -20,7 +21,6 @@
 #define MAX_NAME_LEN    50
 
 struct my_thread_args{
-    int my_thread_id_index;
     int current_connection_index;
 };
 
@@ -29,10 +29,16 @@ struct my_buffer{
     int max_size; //the size of HEAP allocated
 };
 
+struct my_options{
+    bool echo;      //if the client wants it's messages echo'd this is true
+    bool silent;    //if this is true it will override all messages to sender
+};
+
 struct my_connection{
     char user_name[MAX_NAME_LEN];
     int socket_fd;
     pthread_t my_thread_id;
+    struct my_options opt;
 };
 
 
@@ -47,16 +53,20 @@ void clear_connection_at_index(int index);
 int get_client_fd_at_index(int index);
 pthread_t get_thread_id_at_index(int index);
 void handle_ping(int client_fd);
-void handle_login(struct my_buffer *buff, char *c, int my_fd, int my_thread_index, bool *flag);
-void handle_new_user(struct my_buffer *buff, char *c, int my_fd, int my_thread_index, bool *logged_in_flag);
+void handle_login(struct my_buffer *buff, char *c, int my_fd, int my_conn_index, bool *flag);
+void handle_new_user(struct my_buffer *buff, char *c, int my_fd, int my_conn_index, bool *logged_in_flag);
 void handle_broadcast(struct my_buffer *buff, struct my_thread_args *args);
-int get_socket_for_user(char* user_name);
+int get_conn_index_for_user(char* user_name);
 void get_name_for_connection_at_index(int index, char *buff);
-void handle_message_send(struct my_buffer *buff, int my_client_fd, int my_thread_id);
+void handle_message_send(struct my_buffer *buff, int my_conn_index);
 void handle_list(int my_fd);
 void *connection_handler(void *ptr);
 void set_thread_id_at_index(pthread_t handler_thread, int index);
 void set_client_fd_at_index(int client_fd, int index);
+void send_msg(int conn_index, const char *msg);
+bool connection_is_silent(int current_connection_id);
+void toggle_silent(int current_connection_id);
+void set_connection_opt_silent(int current_connection_id, bool state);
 
 // ===== FUNCTIONS ======
 /* make the client at the specififed index not connected */
@@ -97,26 +107,21 @@ pthread_t get_thread_id_at_index(int index){
 }
 
 /* send pong to the client */
-void handle_ping(int client_fd){
-    write(client_fd, "PONG", strlen("PONG"));
+void handle_ping(int client_index){
+    send_msg(client_index, "PONG");
 }
 
 /* Broadcast the message passed in to all currently connected clients */
 void handle_broadcast(struct my_buffer *buff, struct my_thread_args *args){
     
     for(int i = 0; i < NUM_MAX; i++){
-        int temp_fd = NOT_CONNECTED;
-        
-        //only send to the clients connected
-        if((temp_fd = get_client_fd_at_index(i)) != NOT_CONNECTED){
-            write(temp_fd, buff->buffer, strlen(buff->buffer));
-        }
+        send_msg(i, buff->buffer);
     }
 }
 
 
 /* log the user in if they are already registered */
-void handle_login(struct my_buffer *buff, char *c, int my_fd, int my_thread_index, bool *flag){
+void handle_login(struct my_buffer *buff, char *c, int my_fd, int my_conn_index, bool *flag){
     
     //The command is in the form LOGIN <name>, so find the whitespace and use the string after as the username
     strtok(buff->buffer, " ");
@@ -126,33 +131,32 @@ void handle_login(struct my_buffer *buff, char *c, int my_fd, int my_thread_inde
     *LOGIN_SUCCESS = "LOGIN successful",
     *LOGIN_FAIL    = "LOGIN failed - username not found";
     
-    //log in if they are registered
-    pthread_mutex_lock(&mutex);
-    
     //if the user sends LOGIN and no name the sent_name pointer will be NULL, causing an error in the linked list library, so check before it's sent for checking
     if(sent_name){
+        pthread_mutex_lock(&mutex);
         if(list_contains_name(&SHARED_NAMES_LIST, sent_name)){
-            write(my_fd, LOGIN_SUCCESS, strlen(LOGIN_SUCCESS));
+            write(my_fd, LOGIN_SUCCESS, strlen(LOGIN_SUCCESS)); //mutex already locked so no need to lock it
             
             //as the mutex is already locked this is handled here rather than an accessor function
-            strcpy(SHARED_CURRENT_CONNECTIONS[my_thread_index].user_name, sent_name);
-            SHARED_CURRENT_CONNECTIONS[my_thread_index].socket_fd = my_fd;
+            strcpy(SHARED_CURRENT_CONNECTIONS[my_conn_index].user_name, sent_name);
+            SHARED_CURRENT_CONNECTIONS[my_conn_index].socket_fd = my_fd;
             *flag = true;
         }
         else{
-            write(my_fd, LOGIN_FAIL, strlen(LOGIN_FAIL));
+            write(my_fd, LOGIN_FAIL, strlen(LOGIN_FAIL)); //mutex already locked so no need to lock it
         }
+        pthread_mutex_unlock(&mutex);
     }
     //doesnt exist
     else{
-        write(my_fd, LOGIN_FAIL, strlen(LOGIN_FAIL));
+        send_msg(my_conn_index, LOGIN_FAIL);
     }
-    pthread_mutex_unlock(&mutex);
+
     
 }
 
 /* Adds a new user to the username list and logs them in */
-void handle_new_user(struct my_buffer *buff, char *c, int my_fd, int my_thread_index, bool *logged_in_flag){
+void handle_new_user(struct my_buffer *buff, char *c, int my_fd, int my_conn_index, bool *logged_in_flag){
     
     //The command is in the form NEWUSER <name>, so find the whitespace and use the string after as the username
     strtok(buff->buffer, " ");
@@ -168,7 +172,7 @@ void handle_new_user(struct my_buffer *buff, char *c, int my_fd, int my_thread_i
         //only add if the username doesn't already exist
         pthread_mutex_lock(&mutex);
         if(list_contains_name(&SHARED_NAMES_LIST, sent_name)){
-            write(my_fd, LOGIN_FAIL, strlen(LOGIN_FAIL));
+            write(my_fd, LOGIN_FAIL, strlen(LOGIN_FAIL)); //mutex already locked so no need to lock it
         }
         else{
             
@@ -176,32 +180,32 @@ void handle_new_user(struct my_buffer *buff, char *c, int my_fd, int my_thread_i
             list_save(&SHARED_NAMES_LIST);
             
             //as the mutex is already locked this is handled here rather than an accessor function
-            strcpy(SHARED_CURRENT_CONNECTIONS[my_thread_index].user_name, sent_name);
-            SHARED_CURRENT_CONNECTIONS[my_thread_index].socket_fd = my_fd;
+            strcpy(SHARED_CURRENT_CONNECTIONS[my_conn_index].user_name, sent_name);
+            SHARED_CURRENT_CONNECTIONS[my_conn_index].socket_fd = my_fd;
             
-            write(my_fd, LOGIN_SUCCESS, strlen(LOGIN_SUCCESS));
+            write(my_fd, LOGIN_SUCCESS, strlen(LOGIN_SUCCESS)); //mutex already locked so no need to lock it
             *logged_in_flag = true;
         }
         pthread_mutex_unlock(&mutex);
     }
     else{
-        write(my_fd, LOGIN_FAIL, strlen(LOGIN_FAIL));
+        send_msg(my_conn_index, LOGIN_FAIL);
     }
 }
 
 //Gets the socket number of the user name passed in
-int get_socket_for_user(char* user_name){
-    int sock = NOT_CONNECTED;
+int get_conn_index_for_user(char* user_name){
+    int index = NOT_CONNECTED;
     pthread_mutex_lock(&mutex);
     
     for(int i = 0; i < NUM_MAX; i++){
         if(strcmp(user_name, SHARED_CURRENT_CONNECTIONS[i].user_name) == 0){
-            sock = SHARED_CURRENT_CONNECTIONS[i].socket_fd;
+            index = i;
         }
     }
     
     pthread_mutex_unlock(&mutex);
-    return sock;
+    return index;
 }
 
 //Get the user name at the index of the current connections
@@ -212,7 +216,9 @@ void get_name_for_connection_at_index(int index, char *buff){
 }
 
 /* relays a message from the client to another conected client */
-void handle_message_send(struct my_buffer *buff, int my_client_fd, int my_thread_id){
+void handle_message_send(struct my_buffer *buff, int my_conn_index){
+    
+    int my_client_fd= get_client_fd_at_index(my_conn_index);
     
     strtok(buff->buffer, "$");
     char *dest = strtok(NULL, "$");
@@ -220,7 +226,7 @@ void handle_message_send(struct my_buffer *buff, int my_client_fd, int my_thread
     const char *USAGE_MSG = "Usage: SEND $<name> <message to send>";
     
     //if the user didn't enter the command in the form SEND $<user> <msg> then reminde them to use a $
-    if(!dest){ write(my_client_fd, USAGE_MSG, strlen(USAGE_MSG)); return; }
+    if(!dest){ send_msg(my_client_fd, USAGE_MSG); return; }
     
     char name_buff[MAX_NAME_LEN] = { 0, };
     
@@ -232,7 +238,7 @@ void handle_message_send(struct my_buffer *buff, int my_client_fd, int my_thread
     //Get the origin user's name
     char reply[1000] = { 0, }, relay_msg[1000] = { 0, };
     char origin_user[MAX_NAME_LEN] = { 0, };
-    get_name_for_connection_at_index(my_thread_id, origin_user);
+    get_name_for_connection_at_index(my_conn_index, origin_user);
 
     sprintf(reply,"SENT[%s]: ", name_buff);         //initialise the echo message and message to relay
     sprintf(relay_msg, "RECD[%s]: ", origin_user);
@@ -250,14 +256,18 @@ void handle_message_send(struct my_buffer *buff, int my_client_fd, int my_thread
 
     
     //Send the message if the desination user is connected
-    int dest_fd = get_socket_for_user(name_buff);
-    if(dest_fd == NOT_CONNECTED){
-        write(my_client_fd, "Fail", strlen("Fail"));
+    int dest_conn_index = get_conn_index_for_user(name_buff);
+    if(dest_conn_index == NOT_CONNECTED){
+        send_msg(my_conn_index, "Fail");
     }
     else{
         printf("%s\n", reply);
-        write(my_client_fd, reply, strlen(reply));      //echo to sender
-        write(dest_fd, relay_msg, strlen(relay_msg));
+        
+        if(!connection_is_silent(my_conn_index)){
+            send_msg(my_conn_index, reply);
+        }
+        
+        send_msg(dest_conn_index, relay_msg);
     }
 }
 
@@ -287,8 +297,81 @@ void handle_list(int my_fd){
         *last_known_nl = '\0';
     }
     
+    send_msg(my_fd, b);
     
-    write(my_fd, b, strlen(b));
+}
+
+void toggle_silent(int current_connection_id){
+    //printf("My conn_ind:\t %d\n", current_connection_id);
+    assert(current_connection_id < NUM_MAX);
+    pthread_mutex_lock(&mutex);
+    SHARED_CURRENT_CONNECTIONS[current_connection_id].opt.silent = !SHARED_CURRENT_CONNECTIONS[current_connection_id].opt.silent;
+    pthread_mutex_unlock(&mutex);
+}
+
+bool connection_is_silent(int current_connection_id){
+    //printf("My conn_ind:\t %d\n", current_connection_id);
+    assert(current_connection_id < NUM_MAX);
+    bool rc;
+    pthread_mutex_lock(&mutex);
+    rc = SHARED_CURRENT_CONNECTIONS[current_connection_id].opt.silent;
+    pthread_mutex_unlock(&mutex);
+    return rc;
+}
+
+void set_connection_opt_silent(int current_connection_id, bool state){
+    assert(current_connection_id < NUM_MAX);
+    pthread_mutex_lock(&mutex);
+    SHARED_CURRENT_CONNECTIONS[current_connection_id].opt.silent = state;
+    pthread_mutex_unlock(&mutex);
+}
+
+void send_msg(int conn_index, const char *msg){
+    if(!connection_is_silent(conn_index)){
+        int fd;
+        if((fd = get_client_fd_at_index(conn_index)) != NOT_CONNECTED){
+            
+            printf("Sending %s to fd:\t%d\n", msg, fd);
+            pthread_mutex_lock(&mutex);
+            write(fd, msg, strlen(msg));
+            pthread_mutex_unlock(&mutex);
+        }
+    }
+}
+
+
+//NOT THREADSAFE YET
+void handle_options(struct my_buffer *buff, int my_conn_index){
+    
+    const char TOKEN = '$';
+    const char* ON_MSG = "Silent Toggled to: ON";
+    const char* OFF_MSG = "Silent Toggled to: OFF";
+    
+    strtok(buff->buffer, &TOKEN);
+    char *arg = strtok(NULL, &TOKEN);
+    
+    while(arg){
+        if(strstr(arg, "SILENT")){
+            
+            printf("My conn_ind:\t %d\n", my_conn_index);
+            send_msg(my_conn_index, "Silent Recd");
+            
+            toggle_silent(my_conn_index);
+            bool new_silent_state = connection_is_silent(my_conn_index);
+            send_msg(my_conn_index, new_silent_state? ON_MSG : OFF_MSG);
+
+        }
+        else if (strstr(arg, "ECHO")){
+            send_msg(my_conn_index, "toggleing Echo");
+        }
+        else{
+            send_msg(my_conn_index, "Not a valid option");
+        }
+
+        printf("option: %s\n", arg);
+        
+        arg = strtok(NULL, &TOKEN);
+    }
     
 }
 
@@ -324,9 +407,13 @@ void *connection_handler(void *ptr){
         }
         //A loggin in user has access to the commands of the chat
         else if(logged_in){
-            if(strstr(buff.buffer, "PING")){
+            if(strstr(buff.buffer, "OPTIONS")){
+                printf("options rcd\n");
+                handle_options(&buff, args->current_connection_index);
+            }
+            else if(strstr(buff.buffer, "PING")){
                 printf("ping recvd\n");
-                handle_ping(my_client_fd);
+                handle_ping(args->current_connection_index);
             }
             else if(strstr(buff.buffer, "BROADCAST")){
                 printf("bcast request recvd\n");
@@ -337,7 +424,7 @@ void *connection_handler(void *ptr){
             }
             else if(strstr(buff.buffer, "SEND")){
                 printf("message relay request recd\n");
-                handle_message_send(&buff, my_client_fd, args->my_thread_id_index);
+                handle_message_send(&buff, args->current_connection_index);
             }
             else if(strstr(buff.buffer, "LIST")){
                 printf("List recd\n");
@@ -345,17 +432,17 @@ void *connection_handler(void *ptr){
                 
             }
             else{
-                write(my_client_fd, "Computer Says No", strlen("Computer Says No"));
+                send_msg(args->current_connection_index, "Computer Says No");
             }
         }
         else if ((c = strstr(buff.buffer, "LOGIN"))){
-            handle_login(&buff, c, my_client_fd, args->my_thread_id_index, &logged_in);
+            handle_login(&buff, c, my_client_fd, args->current_connection_index, &logged_in);
         }
         else if((c = strstr(buff.buffer, "NEWUSER"))){
-            handle_new_user(&buff, c, my_client_fd, args->my_thread_id_index, &logged_in);
+            handle_new_user(&buff, c, my_client_fd, args->current_connection_index, &logged_in);
         }
         else{
-            write(my_client_fd, "You must log in or create a new user", strlen("You must log in or create a new user"));
+            send_msg(args->current_connection_index, "You must log in or create a new user");
         }
         
         /*
@@ -420,17 +507,13 @@ void *heartbeat_thread(){
     
     while(1){
         for(int i = 0; i < NUM_MAX; i++){
-            int f;
-            if((f = get_client_fd_at_index(i)) != NOT_CONNECTED){
-                printf("Heartbeat to %d\n", f);
-                write(f, "BEAT", strlen("Beat"));
-            }
+            //printf("Heartbeat to fd:%d\n", get_client_fd_at_index(i));
+            send_msg(i, "BEAT");
         }
         
         nanosleep(&time_to_wait, &time_remaining);
     }
 }
-
 
 
 void test_bench(){
@@ -465,6 +548,8 @@ int main(void){
     for(int i = 0; i < NUM_MAX; i++){
         SHARED_CURRENT_CONNECTIONS[i].socket_fd    = NOT_CONNECTED;
         SHARED_CURRENT_CONNECTIONS[i].my_thread_id = NO_ID;
+        SHARED_CURRENT_CONNECTIONS[i].opt.echo = false;
+        SHARED_CURRENT_CONNECTIONS[i].opt.silent = false;
     }
     
     SHARED_NAMES_LIST = list_init(MAX_NAME_LEN, "usernames.txt");
@@ -506,7 +591,6 @@ int main(void){
         
         //construct thread args, free'd in the thread
         struct my_thread_args *args = calloc(1, sizeof(args));
-        args->my_thread_id_index = current_id;
         args->current_connection_index = current_client;
         
         //return -1 if error

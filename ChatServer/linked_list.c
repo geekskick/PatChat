@@ -11,6 +11,7 @@
 //private functions
 struct my_name_list* create_node(const char *name);
 struct my_name_list* find_last_node(struct my_name_list **head);
+
 char *file_path;
 int MAX_NAME_LEN = 0;
 

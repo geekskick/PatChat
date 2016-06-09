@@ -482,9 +482,8 @@ void *connection_handler(void *ptr){
         if(strstr(buff.buffer, "ACK")){
             /* put some handling here */
             printf("ACK recd\n");
-            
-            
         }
+        
         //A kenny loggin'd in user has access to the commands of the chat
         else if(logged_in){
             if(strstr(buff.buffer, "OPT")){

@@ -21,10 +21,11 @@ Recieve a PONG from the server
 LOGOUT
 End current session
 
-OPT $<option 1> $<option 2>
-MAke the specified changes or get information
+OPT $<option 1> $<option 2> ... etc
+Make the specified changes or get information
 $ECHO toggle echo on send
 $SILENT toggles silence
 $ME? gets current username
 $ECHO? get current echo state
 $SILENT? get current cilent state
+$NEWNAME <new name>> change the current username to the new name passed in. This will permanently delete the curent username from the server //NOT IMPLEMENTED

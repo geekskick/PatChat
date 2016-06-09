@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <assert.h>
 #include <arpa/inet.h>
+#include <sys/stat.h>
 
 #include "linked_list.h"
 
@@ -19,6 +20,7 @@
 #define NUM_MAX         5
 #define MAX_USERS       10
 #define MAX_NAME_LEN    50
+#define MAX_BUFF_SIZE   3000
 
 struct my_thread_args{
     int current_connection_index;
@@ -43,10 +45,10 @@ struct my_connection{
 
 
 // ===== SHARED RESOURCES =====
-pthread_mutex_t mutex;
-pthread_t SHARED_THREAD_IDS[NUM_MAX];
+pthread_mutex_t SHARED_MUTEX;
 struct my_connection SHARED_CURRENT_CONNECTIONS[NUM_MAX]; //memory alreasy allocated on stack  so no need to calloc of malloc
 struct my_name_list *SHARED_NAMES_LIST = NULL;
+char *SHARED_HELP_FILE;
 
 // ===== DECLARATIONS ========
 void clear_connection_at_index(int index);
@@ -59,7 +61,7 @@ void handle_broadcast(struct my_buffer *buff, struct my_thread_args *args);
 int get_conn_index_for_user(char* user_name);
 void get_name_for_connection_at_index(int index, char *buff);
 void handle_message_send(struct my_buffer *buff, int my_conn_index);
-void handle_list(int my_fd);
+void handle_list(int my_conn_index);
 void *connection_handler(void *ptr);
 void set_thread_id_at_index(pthread_t handler_thread, int index);
 void set_client_fd_at_index(int client_fd, int index);
@@ -67,20 +69,22 @@ void send_msg(int conn_index, const char *msg);
 bool connection_is_silent(int current_connection_id);
 void toggle_silent(int current_connection_id);
 void set_connection_opt_silent(int current_connection_id, bool state);
+bool get_connection_opt_echo(int current_connection_id);
+void set_connection_opt_echo(int current_connection_id, bool state);
+void toggle_echo(int current_connection_id);
 
 // ===== FUNCTIONS ======
 /* make the client at the specififed index not connected */
 void clear_connection_at_index(int index){
     if(index >= NUM_MAX) { return; }
     
-    pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&SHARED_MUTEX);
     
     SHARED_CURRENT_CONNECTIONS[index].socket_fd = NOT_CONNECTED;
     memset(SHARED_CURRENT_CONNECTIONS[index].user_name, 0, MAX_NAME_LEN);
     SHARED_CURRENT_CONNECTIONS[index].my_thread_id = NO_ID;
     
-    pthread_mutex_unlock(&mutex);
-    
+    pthread_mutex_unlock(&SHARED_MUTEX);
 }
 
 
@@ -89,9 +93,9 @@ int get_client_fd_at_index(int index){
     if(index >= NUM_MAX){ return NOT_CONNECTED; }
     int i = NOT_CONNECTED;
     
-    pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&SHARED_MUTEX);
     i = SHARED_CURRENT_CONNECTIONS[index].socket_fd;
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_unlock(&SHARED_MUTEX);
     return i;
 }
 
@@ -100,9 +104,9 @@ pthread_t get_thread_id_at_index(int index){
     if(index >= NUM_MAX){ return NO_ID; }
     
     pthread_t i = NO_ID;
-    pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&SHARED_MUTEX);
     i = SHARED_CURRENT_CONNECTIONS[index].my_thread_id;
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_unlock(&SHARED_MUTEX);
     return i;
 }
 
@@ -133,7 +137,7 @@ void handle_login(struct my_buffer *buff, char *c, int my_fd, int my_conn_index,
     
     //if the user sends LOGIN and no name the sent_name pointer will be NULL, causing an error in the linked list library, so check before it's sent for checking
     if(sent_name){
-        pthread_mutex_lock(&mutex);
+        pthread_mutex_lock(&SHARED_MUTEX);
         if(list_contains_name(&SHARED_NAMES_LIST, sent_name)){
             write(my_fd, LOGIN_SUCCESS, strlen(LOGIN_SUCCESS)); //mutex already locked so no need to lock it
             
@@ -145,7 +149,7 @@ void handle_login(struct my_buffer *buff, char *c, int my_fd, int my_conn_index,
         else{
             write(my_fd, LOGIN_FAIL, strlen(LOGIN_FAIL)); //mutex already locked so no need to lock it
         }
-        pthread_mutex_unlock(&mutex);
+        pthread_mutex_unlock(&SHARED_MUTEX);
     }
     //doesnt exist
     else{
@@ -170,7 +174,7 @@ void handle_new_user(struct my_buffer *buff, char *c, int my_fd, int my_conn_ind
     if(sent_name){
         
         //only add if the username doesn't already exist
-        pthread_mutex_lock(&mutex);
+        pthread_mutex_lock(&SHARED_MUTEX);
         if(list_contains_name(&SHARED_NAMES_LIST, sent_name)){
             write(my_fd, LOGIN_FAIL, strlen(LOGIN_FAIL)); //mutex already locked so no need to lock it
         }
@@ -186,7 +190,7 @@ void handle_new_user(struct my_buffer *buff, char *c, int my_fd, int my_conn_ind
             write(my_fd, LOGIN_SUCCESS, strlen(LOGIN_SUCCESS)); //mutex already locked so no need to lock it
             *logged_in_flag = true;
         }
-        pthread_mutex_unlock(&mutex);
+        pthread_mutex_unlock(&SHARED_MUTEX);
     }
     else{
         send_msg(my_conn_index, LOGIN_FAIL);
@@ -196,7 +200,7 @@ void handle_new_user(struct my_buffer *buff, char *c, int my_fd, int my_conn_ind
 //Gets the socket number of the user name passed in
 int get_conn_index_for_user(char* user_name){
     int index = NOT_CONNECTED;
-    pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&SHARED_MUTEX);
     
     for(int i = 0; i < NUM_MAX; i++){
         if(strcmp(user_name, SHARED_CURRENT_CONNECTIONS[i].user_name) == 0){
@@ -204,15 +208,15 @@ int get_conn_index_for_user(char* user_name){
         }
     }
     
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_unlock(&SHARED_MUTEX);
     return index;
 }
 
 //Get the user name at the index of the current connections
 void get_name_for_connection_at_index(int index, char *buff){
-    pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&SHARED_MUTEX);
     strcpy(buff, SHARED_CURRENT_CONNECTIONS[index].user_name);
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_unlock(&SHARED_MUTEX);
 }
 
 /* relays a message from the client to another conected client */
@@ -236,8 +240,8 @@ void handle_message_send(struct my_buffer *buff, int my_conn_index){
     char* msg = strtok(NULL, " ");
     
     //Get the origin user's name
-    char reply[1000] = { 0, }, relay_msg[1000] = { 0, };
-    char origin_user[MAX_NAME_LEN] = { 0, };
+    char reply[MAX_BUFF_SIZE] = { 0, }, relay_msg[MAX_BUFF_SIZE] = { 0, }, origin_user[MAX_NAME_LEN] = { 0, };
+    
     get_name_for_connection_at_index(my_conn_index, origin_user);
 
     sprintf(reply,"SENT[%s]: ", name_buff);         //initialise the echo message and message to relay
@@ -263,23 +267,24 @@ void handle_message_send(struct my_buffer *buff, int my_conn_index){
     else{
         printf("%s\n", reply);
         
-        if(!connection_is_silent(my_conn_index)){
+        if(get_connection_opt_echo(my_conn_index)){
             send_msg(my_conn_index, reply);
         }
+        
         
         send_msg(dest_conn_index, relay_msg);
     }
 }
 
 /* Create a list of currently connected usernames and send them to the client */
-void handle_list(int my_fd){
-    
+void handle_list(int my_conn_index){
+    printf("list\n");
     const char *HEADER_MSG = "Currently connected are:\n";
     
     char b[MAX_NAME_LEN * (NUM_MAX + 1) + 30] = { 0, }; //30 characters should be enough to keep the header line in, no need to malloc a small amount only
     strcat(b, HEADER_MSG);
     
-    pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&SHARED_MUTEX);
     
     //Add new line to the list for each user connected
     for(int i = 0; i < NUM_MAX; i++){
@@ -289,7 +294,7 @@ void handle_list(int my_fd){
         }
     }
     
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_unlock(&SHARED_MUTEX);
     
     //remover final new line to keep it pretty for the client
     char *last_known_nl = strrchr(b, '\n');
@@ -297,33 +302,59 @@ void handle_list(int my_fd){
         *last_known_nl = '\0';
     }
     
-    send_msg(my_fd, b);
+    send_msg(my_conn_index, b);
     
+    printf("list end\n");
 }
+
+
 
 void toggle_silent(int current_connection_id){
     //printf("My conn_ind:\t %d\n", current_connection_id);
     assert(current_connection_id < NUM_MAX);
-    pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&SHARED_MUTEX);
     SHARED_CURRENT_CONNECTIONS[current_connection_id].opt.silent = !SHARED_CURRENT_CONNECTIONS[current_connection_id].opt.silent;
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_unlock(&SHARED_MUTEX);
 }
 
 bool connection_is_silent(int current_connection_id){
     //printf("My conn_ind:\t %d\n", current_connection_id);
     assert(current_connection_id < NUM_MAX);
     bool rc;
-    pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&SHARED_MUTEX);
     rc = SHARED_CURRENT_CONNECTIONS[current_connection_id].opt.silent;
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_unlock(&SHARED_MUTEX);
     return rc;
 }
 
 void set_connection_opt_silent(int current_connection_id, bool state){
     assert(current_connection_id < NUM_MAX);
-    pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&SHARED_MUTEX);
     SHARED_CURRENT_CONNECTIONS[current_connection_id].opt.silent = state;
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_unlock(&SHARED_MUTEX);
+}
+
+void toggle_echo(int current_connection_id){
+    assert(current_connection_id < NUM_MAX);
+    pthread_mutex_lock(&SHARED_MUTEX);
+    SHARED_CURRENT_CONNECTIONS[current_connection_id].opt.echo = !SHARED_CURRENT_CONNECTIONS[current_connection_id].opt.echo;
+    pthread_mutex_unlock(&SHARED_MUTEX);
+}
+
+bool get_connection_opt_echo(int current_connection_id){
+    assert(current_connection_id < NUM_MAX);
+    bool rc;
+    pthread_mutex_lock(&SHARED_MUTEX);
+    rc = SHARED_CURRENT_CONNECTIONS[current_connection_id].opt.echo;
+    pthread_mutex_unlock(&SHARED_MUTEX);
+    return rc;
+}
+
+void set_connection_opt_echo(int current_connection_id, bool state){
+    assert(current_connection_id < NUM_MAX);
+    pthread_mutex_lock(&SHARED_MUTEX);
+    SHARED_CURRENT_CONNECTIONS[current_connection_id].opt.echo = state;
+    pthread_mutex_unlock(&SHARED_MUTEX);
 }
 
 void send_msg(int conn_index, const char *msg){
@@ -332,20 +363,43 @@ void send_msg(int conn_index, const char *msg){
         if((fd = get_client_fd_at_index(conn_index)) != NOT_CONNECTED){
             
             printf("Sending %s to fd:\t%d\n", msg, fd);
-            pthread_mutex_lock(&mutex);
+            pthread_mutex_lock(&SHARED_MUTEX);
             write(fd, msg, strlen(msg));
-            pthread_mutex_unlock(&mutex);
+            pthread_mutex_unlock(&SHARED_MUTEX);
         }
     }
 }
 
+void help_file_init(){
+    FILE *fp = fopen("helpfile.txt", "r");
+    if(!fp){ return; }
+    pthread_mutex_lock(&SHARED_MUTEX);
+    
+    struct stat s;
+    stat("helpfile.txt", &s);
+    off_t len = s.st_size;
+    
+    printf("Th file is %lld long\n", len);
+    
+    SHARED_HELP_FILE = calloc(len, sizeof(char));
+    
+    if(!SHARED_HELP_FILE){ KILL("ERROR allocation of help file"); }
+    
+    fread(SHARED_HELP_FILE, len, sizeof(char), fp);
+    
+    pthread_mutex_unlock(&SHARED_MUTEX);
+    fclose(fp);
+}
 
-//NOT THREADSAFE YET
+
+/* if the user enters OPTIONS */
 void handle_options(struct my_buffer *buff, int my_conn_index){
     
     const char TOKEN = '$';
-    const char* ON_MSG = "Silent Toggled to: ON";
-    const char* OFF_MSG = "Silent Toggled to: OFF";
+    const char* SILENT_ON_MSG = "Silent: ON";
+    const char* SILENT_OFF_MSG = "Silent: OFF";
+    const char* ECHO_ON_MSG = "Echo: ON";
+    const char* ECHO_OFF_MSG = "Echo: OFF";
     
     strtok(buff->buffer, &TOKEN);
     char *arg = strtok(NULL, &TOKEN);
@@ -353,25 +407,50 @@ void handle_options(struct my_buffer *buff, int my_conn_index){
     while(arg){
         if(strstr(arg, "SILENT")){
             
-            printf("My conn_ind:\t %d\n", my_conn_index);
-            send_msg(my_conn_index, "Silent Recd");
+            //toggle silent
+            if(!strstr(arg,"?")){
+                toggle_silent(my_conn_index);
+            }
             
-            toggle_silent(my_conn_index);
+            //report the current silent state
             bool new_silent_state = connection_is_silent(my_conn_index);
-            send_msg(my_conn_index, new_silent_state? ON_MSG : OFF_MSG);
+            send_msg(my_conn_index, new_silent_state? SILENT_ON_MSG : SILENT_OFF_MSG);
 
         }
+        
         else if (strstr(arg, "ECHO")){
-            send_msg(my_conn_index, "toggleing Echo");
+            
+            //toggle echo
+            if(!strstr(arg, "?")){
+                toggle_echo(my_conn_index);
+            }
+            
+            //report the current echo state
+            bool new_tog_State = get_connection_opt_echo(my_conn_index);
+            send_msg(my_conn_index, new_tog_State? ECHO_ON_MSG: ECHO_OFF_MSG);
+            
         }
+        
+        else if(strstr(arg, "ME?")){
+            char my_name[MAX_NAME_LEN] = { 0, };
+            get_name_for_connection_at_index(my_conn_index, my_name);
+            send_msg(my_conn_index, my_name);
+        }
+        
+        else if(strstr(arg, "HELP")){
+            send_msg(my_conn_index, SHARED_HELP_FILE);
+        }
+        
         else{
-            send_msg(my_conn_index, "Not a valid option");
+            //head from help file and send contents here
+            send_msg(my_conn_index, "Not a valid option help file follows!");
         }
 
         printf("option: %s\n", arg);
         
         arg = strtok(NULL, &TOKEN);
     }
+    
     
 }
 
@@ -382,10 +461,10 @@ void *connection_handler(void *ptr){
     //cast the incoming struct to access it's contents
     struct my_thread_args *args = (struct my_thread_args*)ptr;
     
-    //create space for the reieved data
+    //create space for the received data
     struct my_buffer buff;
-    buff.buffer = calloc(sizeof(char), 3000);
-    buff.max_size = 3000;
+    buff.buffer = calloc(sizeof(char), MAX_BUFF_SIZE);
+    buff.max_size = MAX_BUFF_SIZE;
     
     //printf("thread_ids[%d] = %d\n", args->my_id, args->all_ids[args->my_id]);
     
@@ -404,10 +483,11 @@ void *connection_handler(void *ptr){
             /* put some handling here */
             printf("ACK recd\n");
             
+            
         }
-        //A loggin in user has access to the commands of the chat
+        //A kenny loggin'd in user has access to the commands of the chat
         else if(logged_in){
-            if(strstr(buff.buffer, "OPTIONS")){
+            if(strstr(buff.buffer, "OPT")){
                 printf("options rcd\n");
                 handle_options(&buff, args->current_connection_index);
             }
@@ -420,6 +500,7 @@ void *connection_handler(void *ptr){
                 handle_broadcast(&buff, args);
             }
             else if(strstr(buff.buffer, "LOGOUT")){
+                printf("logout recd\n");
                 break;
             }
             else if(strstr(buff.buffer, "SEND")){
@@ -428,15 +509,16 @@ void *connection_handler(void *ptr){
             }
             else if(strstr(buff.buffer, "LIST")){
                 printf("List recd\n");
-                handle_list(my_client_fd);
+                handle_list(args->current_connection_index);
                 
             }
             else{
-                send_msg(args->current_connection_index, "Computer Says No");
+                send_msg(args->current_connection_index, "Type \"OPT $HELP\" for commands");
             }
         }
         else if ((c = strstr(buff.buffer, "LOGIN"))){
             handle_login(&buff, c, my_client_fd, args->current_connection_index, &logged_in);
+
         }
         else if((c = strstr(buff.buffer, "NEWUSER"))){
             handle_new_user(&buff, c, my_client_fd, args->current_connection_index, &logged_in);
@@ -484,18 +566,18 @@ void *connection_handler(void *ptr){
 void set_thread_id_at_index(pthread_t handler_thread, int index) {
     if(index >= NUM_MAX) { return; }
     
-    pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&SHARED_MUTEX);
     SHARED_CURRENT_CONNECTIONS[index].my_thread_id = handler_thread;
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_unlock(&SHARED_MUTEX);
 }
 
 /* put a client id into the array */
 void set_client_fd_at_index(int client_fd, int index) {
     if(index >= NUM_MAX) { return; }
     
-    pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&SHARED_MUTEX);
     SHARED_CURRENT_CONNECTIONS[index].socket_fd = client_fd;
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_unlock(&SHARED_MUTEX);
 }
 
 /* sends "Beat" to the clients every 5 seconds */
@@ -534,16 +616,12 @@ void test_bench(){
     exit(EXIT_SUCCESS);
 }
 
-int main(void){
-    
-    printf("Starting program\n");
-    //test_bench();
-    
-    const int PORT_NUM = 51718;
-    int       server_fd, client_fd;
-    struct sockaddr_in server_addr, client_addr;
-    pthread_t heartbeat;
-    
+void *get_stop_cmd(){
+    //something to make the program quite safely in here
+    while(1){}
+}
+
+void init_resources(){
     //init shared resources
     for(int i = 0; i < NUM_MAX; i++){
         SHARED_CURRENT_CONNECTIONS[i].socket_fd    = NOT_CONNECTED;
@@ -554,6 +632,21 @@ int main(void){
     
     SHARED_NAMES_LIST = list_init(MAX_NAME_LEN, "usernames.txt");
     list_populate(&SHARED_NAMES_LIST);
+    help_file_init();
+    
+}
+int main(void){
+    
+    printf("Starting program\n");
+    //test_bench();
+    
+    const int PORT_NUM = 51718;
+    int       server_fd, client_fd;
+    struct sockaddr_in server_addr, client_addr;
+    pthread_t heartbeat;
+    pthread_t stop_thread;
+    
+    init_resources();
     
     //TCP IP Server
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -565,12 +658,13 @@ int main(void){
     
     if( bind(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) { KILL("Binding Error"); }
     
-    pthread_mutex_init(&mutex, NULL);
+    pthread_mutex_init(&SHARED_MUTEX, NULL);
     
     listen(server_fd, NUM_MAX);
     printf("Waiting for connections on port %d\n", PORT_NUM);
     
-    if(pthread_create(&heartbeat, NULL, heartbeat_thread, NULL)< 0) { KILL("Heartbeat creation"); }
+    if(pthread_create(&heartbeat, NULL, heartbeat_thread, NULL) < 0) { KILL("Heartbeat creation"); }
+    if(pthread_create(&stop_thread, NULL, get_stop_cmd, NULL) < 0){ KILL("Stop creation"); }
     
     int clilen = sizeof(client_addr);
     
@@ -603,11 +697,15 @@ int main(void){
         pthread_join(get_thread_id_at_index(i), NULL);
     }
     
-    pthread_kill(heartbeat, 0);
-    pthread_join(heartbeat, NULL);
+    pthread_cancel(heartbeat);
+    pthread_cancel(stop_thread);
     
-    pthread_mutex_destroy(&mutex);
+    pthread_join(heartbeat, NULL);
+    pthread_join(stop_thread, NULL);
+    
+    pthread_mutex_destroy(&SHARED_MUTEX);
     
     list_destroy(&SHARED_NAMES_LIST);
+    free(SHARED_HELP_FILE);
     exit(EXIT_SUCCESS);
 }

@@ -1,0 +1,30 @@
+Commands:
+
+SEND $<destination_user_name> <msg to send>
+Send a message to a connected user
+
+LIST
+Lists currently connected users
+
+BROADCAST <msg to send>
+Send message to all connected users
+
+LOGIN <name>
+Login as the user name selected
+
+NEWUSER <name>
+Create a new user name and login
+
+PING
+Recieve a PONG from the server
+
+LOGOUT
+End current session
+
+OPT $<option 1> $<option 2>
+MAke the specified changes or get information
+$ECHO toggle echo on send
+$SILENT toggles silence
+$ME? gets current username
+$ECHO? get current echo state
+$SILENT? get current cilent state

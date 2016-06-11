@@ -15,6 +15,28 @@ struct my_name_list* find_last_node(struct my_name_list **head);
 char *file_path;
 int MAX_NAME_LEN = 0;
 
+void list_remove_name(struct my_name_list **head, const char *name_to_remove, struct my_name_list* previous_node)
+{
+    struct my_name_list *current_node = *head;
+    if(current_node){
+        if(strcmp(current_node->name, name_to_remove) == 0){
+            struct my_name_list *next_node = current_node->next;
+            
+            free(current_node->name);
+            current_node->name = NULL;
+            
+            free(current_node);
+            current_node = NULL;
+            
+            previous_node->next = next_node;
+        }
+        else{
+            list_remove_name(&(current_node->next), name_to_remove, current_node);
+        }
+    }
+
+}
+
 bool list_contains_name(struct my_name_list **head, const char *name_to_find){
     
     struct my_name_list* current_node = *head;

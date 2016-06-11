@@ -28,4 +28,4 @@ $SILENT toggles silence
 $ME? gets current username
 $ECHO? get current echo state
 $SILENT? get current cilent state
-$NEWNAME <new name>> change the current username to the new name passed in. This will permanently delete the curent username from the server //NOT IMPLEMENTED
+$NEWNAME <new name> change the current username to the new name passed in. This will permanently delete the curent username from the server. Note: this command must be used last in a chain of options. All options after this are ignored.

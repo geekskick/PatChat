@@ -28,5 +28,6 @@ struct my_name_list* list_init(int max_name_length, const char *filepath);
 bool list_populate(struct my_name_list **head);
 void list_save(struct my_name_list **head);
 bool list_contains_name(struct my_name_list **head, const char *name_to_find);
+void list_remove_name(struct my_name_list **head, const char *name_to_remove, struct my_name_list *previous_node);
 
 #endif /* linked_list_h */

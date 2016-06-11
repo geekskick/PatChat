@@ -46,8 +46,8 @@ struct my_connection{
 
 // ===== SHARED RESOURCES =====
 pthread_mutex_t SHARED_MUTEX;
-struct my_connection SHARED_CURRENT_CONNECTIONS[NUM_MAX]; //memory alreasy allocated on stack  so no need to calloc of malloc
-struct my_name_list *SHARED_NAMES_LIST = NULL;
+volatile struct my_connection SHARED_CURRENT_CONNECTIONS[NUM_MAX]; //memory alreasy allocated on stack  so no need to calloc of malloc
+volatile struct my_name_list *SHARED_NAMES_LIST = NULL;
 char *SHARED_HELP_FILE;
 
 // ===== DECLARATIONS ========
@@ -138,6 +138,8 @@ void handle_login(struct my_buffer *buff, char *c, int my_fd, int my_conn_index,
     //if the user sends LOGIN and no name the sent_name pointer will be NULL, causing an error in the linked list library, so check before it's sent for checking
     if(sent_name){
         pthread_mutex_lock(&SHARED_MUTEX);
+        list_print(&SHARED_NAMES_LIST);
+        
         if(list_contains_name(&SHARED_NAMES_LIST, sent_name)){
             write(my_fd, LOGIN_SUCCESS, strlen(LOGIN_SUCCESS)); //mutex already locked so no need to lock it
             
@@ -439,6 +441,35 @@ void handle_options(struct my_buffer *buff, int my_conn_index){
         
         else if(strstr(arg, "HELP")){
             send_msg(my_conn_index, SHARED_HELP_FILE);
+        }
+        
+        else if(strstr(arg, "NEWNAME")){
+            bool changed = false;
+            char *name;
+            const char SPACE = ' ';
+            strtok(arg, &SPACE);
+            name = strtok(NULL, &SPACE);
+            
+            while(name){
+                if(!strstr(name, &TOKEN)){
+                    
+                    //no need to check the name is in the list becuase this was donw before to log the user in
+                    pthread_mutex_lock(&SHARED_MUTEX);
+                    list_remove_name(&SHARED_NAMES_LIST, SHARED_CURRENT_CONNECTIONS[my_conn_index].user_name, NULL);
+                    list_add_name(&SHARED_NAMES_LIST, name);
+                    list_print(&SHARED_NAMES_LIST);
+                    list_save(&SHARED_NAMES_LIST);
+                    pthread_mutex_unlock(&SHARED_MUTEX);
+                    
+                    send_msg(my_conn_index, "Changed yo' name");
+                    changed = true;
+                    break;
+                }
+                else{
+                    name = strtok(NULL, &SPACE);
+                }
+            }
+            if(!changed){ send_msg(my_conn_index, "Name not changed"); }
         }
         
         else{

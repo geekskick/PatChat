@@ -83,9 +83,9 @@ $NEWNAME <new name> change the current username to the new name passed in. This 
   - [ ] Dynamic list of usernames which can grow/shink as clients connect
   - [X] Saving usernames to a file for later re-use
   - [X] Options Flags
-  - [ ] Ability to change the current username, requires
-    - [ ] Linked list item removal
-    - [ ] Tokenising the OPT string by space as well as by '$' 
+  - [X] Ability to change the current username, requires
+    - [X] Linked list item removal
+    - [X] Tokenising the OPT string by space as well as by '$' 
   - [ ] Error handling - at the moment there is little by way of error handling and feedback to clients if an error occurs.
 
 - Client
